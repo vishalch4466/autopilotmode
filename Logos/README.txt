@@ -4,6 +4,10 @@ autopilotmode — logo files
 Transparent background (horizontal set)
   logo-mark.svg / .png             switch mark only (336×208; PNG @4x = 1344×832)
   logo-lockup.svg / .png           mark + wordmark (PNG @4x = 4084×832)
+  logo-lockup-dark.svg / .png      same, wordmark in white — for dark backgrounds
+
+The plain lockup's wordmark is ink, which disappears on a dark page. Pair the two with
+a <picture> element so each theme gets the right one.
 
 Square, dark tile (app icon / avatar)
   logo-square-mark.svg / .png      512×512 (PNG 1024×1024)

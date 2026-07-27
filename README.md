@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="Logos/logo-lockup.png" alt="autopilotmode" width="460">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="Logos/logo-lockup-dark.png">
+    <img src="Logos/logo-lockup.png" alt="autopilotmode" width="460">
+  </picture>
 </p>
 
 <p align="center">
@@ -223,21 +226,6 @@ had no security review.
 - **Speed is bounded by thinking, not by anything you can tune.** Screenshot size and
   quality barely move it. Choosing a faster model is the lever that works.
 - **It doesn't remember across runs.** Each goal starts fresh.
-
----
-
-## Brand
-
-<img src="Logos/logo-mark.png" alt="" width="120" align="right">
-
-The mark is a toggle switch: a person on one side, a robot on the other, flipped over to
-the robot. That's the product in one image — you hand control across, and you can hand it
-back.
-
-Green `#0f9d6e`, ink `#101318`. Full asset set — transparent marks, wordmark lockups, and
-square tiles for app icons and avatars — lives in [`Logos/`](Logos/).
-
-<br clear="right">
 
 ---
 
