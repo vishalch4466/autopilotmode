@@ -1,0 +1,54 @@
+# The desktop app is a separate crate so the webview toolchain is not a dependency of the
+# CLI — `cargo build -p autopilotmode` stays a plain, fast console build.
+[workspace]
+members = ["src-tauri"]
+
+[package]
+name = "autopilotmode"
+version = "0.1.0"
+edition = "2021"
+description = "AI agent that controls the mouse/keyboard by looping screenshots through a vision-language model (Claude) and executing the returned actions with enigo."
+license = "MIT"
+
+# The loop is a library first. Every front-end (CLI, egui buddy, Tauri desktop) links the
+# same agent rather than reimplementing it — see src/lib.rs.
+[lib]
+name = "autopilotmode"
+path = "src/lib.rs"
+
+[[bin]]
+name = "autopilotmode"
+path = "src/main.rs"
+
+[dependencies]
+# OS input injection (mouse + keyboard). See ../rustdesk/mouse.md for how enigo drives
+# the platform APIs under the hood (SendInput / CGEvent / XTest / uinput).
+enigo = "0.3"
+# Cross-platform screen capture.
+xcap = "0.0.14"
+# Image resize + PNG encode (we reconstruct RgbaImage from raw bytes so xcap's image
+# version can never clash with ours).
+image = "0.25"
+base64 = "0.22"
+# Claude API over raw HTTP (there is no official Anthropic Rust SDK). rustls avoids an
+# OpenSSL system dependency.
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+dotenvy = "0.15"
+clap = { version = "4", features = ["derive"] }
+# Ctrl-C must release latched keys (see executor::keydown). Killing the process with a key
+# physically down leaves it stuck at the OS level — the car keeps accelerating and the
+# user's keyboard appears broken until they tap the key themselves.
+ctrlc = "3"
+# Floating desktop buddy (`--buddy`). egui is immediate-mode and ships its own renderer, so
+# the whole UI is one dependency with no system toolkit to install.
+# `default_fonts` is NOT optional in practice: without it egui ships no font data and every
+# label renders as nothing at all — shapes draw fine, so it looks like a layout bug.
+eframe = { version = "0.31", default-features = false, features = [
+    "glow",
+    "default_fonts",
+    "wayland",
+    "x11",
+] }

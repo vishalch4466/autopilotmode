@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="208" viewBox="0 0 1120 208" fill="none">
+  <rect x="8" y="28" width="320" height="152" rx="76" fill="#0f9d6e"></rect>
+  <circle cx="92" cy="83" r="22" fill="#0b1a14" fill-opacity="0.42"></circle>
+  <path d="M57 145a35 35 0 0170 0z" fill="#0b1a14" fill-opacity="0.42"></path>
+  <circle cx="244" cy="104" r="61" fill="#ffffff"></circle>
+  <path d="M244 72V54" stroke="#0f9d6e" stroke-width="9" stroke-linecap="round"></path>
+  <circle cx="244" cy="49" r="8" fill="#0f9d6e" stroke="#ffffff" stroke-width="6"></circle>
+  <rect x="212" y="78" width="64" height="52" rx="17" fill="#0f9d6e"></rect>
+  <circle cx="231" cy="104" r="7.5" fill="#ffffff"></circle>
+  <circle cx="257" cy="104" r="7.5" fill="#ffffff"></circle>
+  <text x="372" y="130" font-family="Space Grotesk, Helvetica, Arial, sans-serif" font-size="96" font-weight="700" letter-spacing="-3.4" fill="#101318">autopilot<tspan fill="#0f9d6e">mode</tspan></text>
+</svg>

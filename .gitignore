@@ -1,0 +1,15 @@
+/target
+
+# Your real keys. `.env.example` is the committed template and must stay tracked — the
+# negation is belt-and-braces, since `.env` matches only that exact name anyway.
+.env
+!.env.example
+
+# Tauri writes generated capability/schema files here.
+/src-tauri/gen/
+
+# Scratch copies of the README kept while rewriting it.
+READMEtemp.md
+
+# Local Claude Code settings and session data.
+/.claude/

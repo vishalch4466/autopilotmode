@@ -1,0 +1,363 @@
+/* autopilotmode desktop — brand surface.
+   Palette matches Logos/README.txt so the app and the marks stay in step. */
+
+:root {
+  --green: #0f9d6e;
+  --ink: #101318;
+  --line: #262e38;
+  --bubble: #1a1f26;
+  --field: #151a21;
+  --hover: #232a34;
+  --text: #e8eef4;
+  --muted: #8a97a6;
+  --amber: #f5a03c;
+
+  /* Set per mood by the card class below; everything mood-coloured reads from these. */
+  --mood: var(--green);
+  --mood-soft: rgb(15 157 110 / 0.22);
+}
+
+.mood-thinking { --mood: #3b82f6; --mood-soft: rgb(59 130 246 / 0.26); }
+/* Success is a brighter green than the brand's, not a neighbour of it — the glow is read
+   at a glance from across the room, and two deep greens one shade apart say nothing. */
+.mood-happy    { --mood: #34d399; --mood-soft: rgb(52 211 153 / 0.28); }
+.mood-sad      { --mood: #d9534f; --mood-soft: rgb(217 83 79 / 0.28); }
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* A class that sets `display` outranks the UA rule for the `hidden` attribute, so any
+   element styled with a layout mode silently ignores `hidden`. Restate it as a floor. */
+[hidden] { display: none !important; }
+
+html, body {
+  height: 100%;
+  background: transparent; /* the window is transparent; the card draws the only surface */
+  overflow: hidden;
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  color: var(--text);
+  cursor: default;
+  user-select: none;
+}
+
+.card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.45);
+}
+
+/* ── header ─────────────────────────────────────────────────────────── */
+
+header { display: flex; align-items: center; gap: 10px; }
+
+.mark {
+  width: 68px;
+  flex: none;
+  /* drop-shadow follows the mark's real silhouette, so the mood glow hugs the switch
+     instead of boxing it. Two stacked shadows give the falloff a single one can't. */
+  filter: drop-shadow(0 0 5px var(--mood-soft)) drop-shadow(0 0 13px var(--mood-soft));
+  animation: bob 3.6s ease-in-out infinite;
+}
+.mark svg { display: block; width: 100%; height: auto; }
+
+/* Enough motion to read as alive, not enough to nag on an always-on-top window. */
+@keyframes bob { 50% { transform: translateY(-2px); } }
+@keyframes pulse { 50% { opacity: 0.55; } }
+
+.card.busy .mark { animation: bob 1.5s ease-in-out infinite; }
+.mood-thinking .mark { animation: bob 1.5s ease-in-out infinite, pulse 1.2s ease-in-out infinite; }
+
+.identity { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+
+.wordmark { font-size: 15px; font-weight: 650; letter-spacing: -0.015em; }
+.wordmark span { color: var(--green); }
+
+.pills { display: flex; align-items: center; gap: 5px; }
+
+.pill {
+  padding: 2px 8px;
+  border-radius: 7px;
+  font-size: 11px;
+  color: var(--muted);
+  background: rgb(138 151 166 / 0.14);
+}
+.card.busy #status { color: var(--mood); background: var(--mood-soft); }
+
+/* A caveat, not an alarm: outlined and amber rather than filled and red, so it reads as
+   standing information instead of something that just went wrong. */
+.pill.tag {
+  padding: 1px 7px;
+  border: 1px solid rgb(245 160 60 / 0.42);
+  background: transparent;
+  color: var(--amber);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  cursor: help;
+}
+
+.close {
+  flex: none;
+  width: 24px; height: 24px;
+  align-self: flex-start;
+  border: 0; border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 17px; line-height: 1;
+  cursor: pointer;
+}
+.close:hover { background: var(--hover); color: var(--text); }
+
+/* ── speech bubble ──────────────────────────────────────────────────── */
+
+.log {
+  flex: 1;
+  min-height: 0;           /* lets the flex child actually scroll */
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.msg {
+  max-width: 92%;
+  padding: 8px 11px;
+  border-radius: 12px;
+  background: var(--bubble);
+  font-size: 13px;
+  line-height: 1.35;
+}
+/* The agent's own turns keep the speech-bubble tail; the user's do not need one. */
+.msg.bot { align-self: flex-start; position: relative; border-top-left-radius: 4px; }
+.msg.you {
+  align-self: flex-end;
+  background: rgb(15 157 110 / 0.16);
+  border: 1px solid rgb(15 157 110 / 0.35);
+  border-top-right-radius: 4px;
+}
+.msg.err { background: rgb(217 83 79 / 0.14); border: 1px solid rgb(217 83 79 / 0.4); }
+
+.msg code {
+  display: block;
+  margin-top: 3px;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 11px;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+/* A step marker rather than a message — thin, centred, easy to skim past. */
+.step {
+  align-self: center;
+  padding: 1px 8px;
+  border-radius: 6px;
+  background: rgb(138 151 166 / 0.1);
+  font-size: 10px;
+  color: var(--muted);
+}
+
+/* What the agent saw. Click to toggle between thumbnail and full width. */
+.shot {
+  align-self: stretch;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #000;
+  cursor: zoom-in;
+}
+.shot img { display: block; width: 100%; height: auto; }
+.shot.small { max-width: 190px; align-self: flex-start; }
+.shot.small { cursor: zoom-in; }
+.shot:not(.small) { cursor: zoom-out; }
+
+/* ── controls ───────────────────────────────────────────────────────── */
+
+.row { display: flex; align-items: center; gap: 6px; }
+.footer { margin-top: auto; }
+
+.icon-btn {
+  flex: none;
+  width: 34px; height: 30px;
+  display: grid; place-items: center;
+  border: 1px solid var(--line); border-radius: 9px;
+  background: var(--bubble);
+  color: var(--muted);
+  cursor: pointer;
+}
+.icon-btn svg { width: 17px; height: 17px; }
+.icon-btn:hover:not(:disabled) { background: var(--hover); border-color: rgb(15 157 110 / 0.55); color: var(--text); }
+.icon-btn.listening { color: var(--amber); border-color: var(--amber); background: rgb(245 160 60 / 0.14); }
+.icon-btn:disabled { opacity: 0.45; cursor: default; }
+
+input#goal {
+  flex: 1; min-width: 0; height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line); border-radius: 9px;
+  background: var(--field);
+  color: var(--text);
+  font: inherit; font-size: 13px;
+  user-select: text;
+}
+input#goal::placeholder { color: var(--muted); }
+input#goal:focus { outline: none; border-color: var(--green); box-shadow: 0 0 0 2px rgb(15 157 110 / 0.22); }
+input#goal:disabled { opacity: 0.55; }
+
+.go {
+  flex: none;
+  min-width: 48px; height: 30px;
+  border: 1px solid var(--line); border-radius: 9px;
+  background: var(--bubble);
+  color: var(--muted);
+  font: inherit; font-size: 13px; font-weight: 650;
+  cursor: pointer;
+}
+/* Green only when it will actually do something — an always-green primary on a window
+   that can seize the mouse is a worse signal than no signal. */
+.go:not(:disabled) { background: var(--green); border-color: var(--green); color: var(--ink); }
+.go:not(:disabled):hover { filter: brightness(1.08); }
+.go:disabled { cursor: default; }
+
+/* The product's mark is a toggle switch, so the one mode control is that same object. */
+.switch {
+  flex: none;
+  width: 36px; height: 20px;
+  position: relative;
+  border: 0; border-radius: 999px;
+  background: var(--line);
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+.switch.is-on { background: var(--green); }
+.switch:disabled { opacity: 0.5; cursor: default; }
+.switch .knob {
+  position: absolute; top: 3px; left: 3px;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--text);
+  transition: transform 0.14s cubic-bezier(0.2, 0, 0, 1);
+}
+.switch.is-on .knob { transform: translateX(16px); }
+
+.mode { font-size: 12px; font-weight: 650; color: var(--muted); }
+.mode.live { color: var(--amber); }
+.note { margin-left: auto; font-size: 11px; color: var(--muted); }
+
+.stop {
+  flex: none;
+  min-width: 52px; height: 30px;
+  border: 1px solid rgb(217 83 79 / 0.55); border-radius: 9px;
+  background: rgb(217 83 79 / 0.16);
+  color: #ff8f8b;
+  font: inherit; font-size: 13px; font-weight: 650;
+  cursor: pointer;
+}
+.stop:hover { background: rgb(217 83 79 / 0.26); }
+
+/* ── settings ───────────────────────────────────────────────────────── */
+
+.icon-btn.ghost {
+  width: 24px; height: 24px;
+  align-self: flex-start;
+  border: 0; background: transparent;
+}
+.icon-btn.ghost svg { width: 15px; height: 15px; }
+.icon-btn.ghost:hover:not(:disabled) { background: var(--hover); border: 0; color: var(--text); }
+
+.settings {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--ink);
+  overflow-y: auto;
+}
+.card { position: relative; }
+
+.settings-head { display: flex; align-items: center; margin-bottom: 2px; }
+.settings-head h2 { flex: 1; font-size: 14px; font-weight: 650; }
+
+.settings label {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.settings input, .settings select {
+  width: 100%; height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--field);
+  color: var(--text);
+  font: inherit; font-size: 12.5px;
+  user-select: text;
+}
+.settings select { padding-left: 6px; }
+.settings input:focus, .settings select:focus {
+  outline: none;
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px rgb(15 157 110 / 0.22);
+}
+
+.key-row { display: flex; gap: 6px; align-items: center; }
+.key-row input { flex: 1; min-width: 0; }
+
+.grid { display: grid; grid-template-columns: 1fr 84px 96px; gap: 8px; }
+
+.section {
+  margin: 6px 0 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.voice-row { display: flex; align-items: center; gap: 8px; }
+.voice-row .mode { flex: 1; }
+.voice-row select { width: 132px; }
+.voice-row .link { flex: none; padding: 6px 10px; }
+.settings label.inline { margin: 0; flex: none; width: 46px; }
+#voice-pick select { flex: 1; width: auto; }
+/* The switch is a button; stop the generic settings-input rule from restyling it. */
+.settings .switch { width: 36px; height: 20px; padding: 0; background: var(--line); }
+.settings .switch.is-on { background: var(--green); }
+
+.hint {
+  font-size: 10.5px;
+  color: var(--muted);
+  word-break: break-all;
+  line-height: 1.35;
+}
+.hint.warn { color: var(--amber); }
+
+.settings-actions { margin-top: auto; padding-top: 6px; }
+.settings-actions .note { margin-left: 6px; }
+.settings-actions .go { margin-left: auto; }
+
+.link {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 9px;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit; font-size: 11.5px;
+  cursor: pointer;
+}
+.link svg { width: 12px; height: 12px; }
+.link:hover { color: var(--text); border-color: rgb(245 160 60 / 0.5); }
+.link:hover svg { color: var(--amber); }

@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "What the autopilotmode window is allowed to do. Custom commands (start_run, stop_run, load_settings, save_settings) are always callable; only the built-in window commands need granting, and only the four below are used.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-size",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging"
+  ]
+}
