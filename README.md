@@ -78,16 +78,44 @@ was holding down.
 
 ## Getting started
 
-**You'll need:** a Windows, macOS, or Linux machine with a display (it drives the real
-cursor, so it can't run on a headless server), [Rust](https://rustup.rs), and an
-[Anthropic API key](https://console.anthropic.com).
+**Build it yourself. It's the recommended way to run this** — and for software that takes
+over your mouse and keyboard, you should want a build you made from source you can read.
+That's the whole point of it being open.
 
 ```bash
+git clone https://github.com/vishalch4466/autopilotmode
+cd autopilotmode
 cargo build --release
 cargo run --release -p autopilotmode-desktop
 ```
 
+You'll need [Rust](https://rustup.rs), a machine with a display (it drives the real cursor,
+so it can't run headless), and an [Anthropic API key](https://console.anthropic.com). The
+first build takes a few minutes; after that it's seconds.
+
 On first launch it'll ask for your API key and save it. That's the whole setup.
+
+<details>
+<summary><b>Prebuilt Windows binary</b> — if you'd rather not build</summary>
+
+<br>
+
+[**Download the latest release →**](https://github.com/vishalch4466/autopilotmode/releases/latest)
+
+Windows 10/11, 64-bit. No installer — download and run.
+
+The binaries are **unsigned**, so SmartScreen will warn you ("Windows protected your PC").
+That warning is correct to show for any unsigned binary off the internet. Each release
+publishes SHA256 checksums so you can verify what you downloaded:
+
+```powershell
+Get-FileHash .\autopilotmode-desktop-v0.1.0-windows-x64.exe -Algorithm SHA256
+```
+
+If clicking through a security warning to run something that controls your keyboard feels
+wrong — good instinct. Build from source instead.
+
+</details>
 
 Then type a goal, leave **Dry run** on for your first few, and watch what it decides to do
 before letting it touch anything.
