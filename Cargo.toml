@@ -5,7 +5,7 @@ members = ["src-tauri"]
 
 [package]
 name = "autopilotmode"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "AI agent that controls the mouse/keyboard by looping screenshots through a vision-language model (Claude) and executing the returned actions with enigo."
 license = "MIT"

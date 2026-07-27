@@ -112,7 +112,7 @@ That warning is correct to show for any unsigned binary off the internet. Each r
 publishes SHA256 checksums so you can verify what you downloaded:
 
 ```powershell
-Get-FileHash .\autopilotmode-desktop-v0.1.0-windows-x64.exe -Algorithm SHA256
+Get-FileHash .\autopilotmode-desktop-v0.1.1-windows-x64.exe -Algorithm SHA256
 ```
 
 If clicking through a security warning to run something that controls your keyboard feels

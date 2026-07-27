@@ -1,6 +1,6 @@
 [package]
 name = "autopilotmode-desktop"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Desktop front-end for autopilotmode — a webview UI over the same agent loop."
 license = "MIT"
