@@ -93,8 +93,11 @@ cargo run --release -p autopilotmode-desktop
 ```
 
 You'll need [Rust](https://rustup.rs), a machine with a display (it drives the real cursor,
-so it can't run headless), and an [Anthropic API key](https://console.anthropic.com). The
-first build takes a few minutes; after that it's seconds.
+so it can't run headless), and a key — either an
+[Anthropic API key](https://console.anthropic.com) or an
+[OpenRouter key](https://openrouter.ai/keys) if you'd rather pick from
+[everyone else's models](#openrouter). The first build takes a few minutes; after that it's
+seconds.
 
 On first launch it'll ask for your API key and save it. That's the whole setup.
 
@@ -147,6 +150,7 @@ cargo run --release -- "open a terminal and run 'ls'"
 | `--yes` | Skip the confirmation prompt |
 | `--max-steps <N>` | Cap the number of actions (default 25) |
 | `--model <ID>` | Use a different model for this run |
+| `--provider <NAME>` | `anthropic` or `openrouter` — see [OpenRouter](#openrouter) |
 | `--wait <SECS>` | Pause before starting so you can focus the right window |
 | `--fast` | Trade a little accuracy for a shorter loop |
 | `--game` | Real-time preset for games — see below |
@@ -160,7 +164,8 @@ Everything you'd want to change is in the gear menu — no config files to hand-
 
 | | |
 |---|---|
-| **API key** | Required. Stored locally, never leaves your machine except to Anthropic |
+| **Provider** | Anthropic directly, or [OpenRouter](#openrouter) for everyone else's models |
+| **API key** | Required. Stored locally, never leaves your machine except to your provider |
 | **Model** | Swap in a faster or cheaper one whenever you like |
 | **Max steps** | How long a single run may go before it gives up |
 | **Effort** | How hard it thinks before each action |
@@ -170,6 +175,44 @@ Everything you'd want to change is in the gear menu — no config files to hand-
 Voice input needs an [ElevenLabs](https://elevenlabs.io) key. Spoken *replies* don't —
 those use your system voice for free, and ElevenLabs is an optional upgrade if you want it
 to sound better.
+
+---
+
+## OpenRouter
+
+Point it at [OpenRouter](https://openrouter.ai) instead and one key reaches everyone's
+models — GPT, Gemini, Grok, Kimi, Qwen, Mistral — alongside Claude.
+
+Paste an OpenRouter key in settings, switch **Provider** to OpenRouter, and a model picker
+appears in the main window, right under the box you type goals into. Change it between runs.
+That placement is the point: when a run goes wrong you have just watched it go wrong, and a
+different model is often the fix — it shouldn't be three clicks into a settings pane.
+
+The list is fetched live from OpenRouter and filtered twice, because most of the catalogue
+can't do this job:
+
+- **Vision and tool calling are both required.** Every step shows the model a screenshot and
+  demands an action back. That alone rules out over half of what OpenRouter carries.
+- **One model per company** — whichever currently scores highest. A dropdown of 150 entries,
+  most of them older revisions of each other, is a worse way to choose than a dozen named
+  "the best each company has". Nothing is hardcoded, so the list follows the catalogue as
+  models ship.
+
+Want a specific one instead? Type any id from [openrouter.ai/models](https://openrouter.ai/models)
+into the Model field in settings. The picker narrows the menu, not what can run.
+
+> **Reading a screen accurately is its own skill, and models vary more at it than benchmarks
+> suggest.** In testing, some returned coordinates outside the image entirely — clicking
+> (500, 526) on a 400×300 screen. If a run flails without ever hitting the right thing, try
+> a stronger model before tuning anything else.
+
+Provider quirks are handled automatically. Some reject a forced tool call, some reject it
+only while thinking is on, and they disagree about the wording of the error; the client
+notices what a model won't accept, drops that field, and remembers it for the rest of the
+run rather than rediscovering it every step.
+
+Two things don't carry over: prompt caching and fast mode are Anthropic features, so runs
+through OpenRouter cost more per step and can be slower. Effort still works.
 
 ---
 
@@ -226,6 +269,18 @@ had no security review.
 - **Speed is bounded by thinking, not by anything you can tune.** Screenshot size and
   quality barely move it. Choosing a faster model is the lever that works.
 - **It doesn't remember across runs.** Each goal starts fresh.
+
+---
+
+## License
+
+[MIT](LICENSE). Use it, change it, ship it in something commercial — keep the copyright
+notice and you're fine.
+
+The part worth reading twice is the warranty disclaimer. MIT provides this **as is, with no
+warranty and no liability**, and that clause is doing more work here than in most projects:
+this is unaudited software that takes over your mouse and keyboard. If it clicks something
+it shouldn't, that's yours to wear. Start in **Dry run**, and see [Safety](#safety).
 
 ---
 

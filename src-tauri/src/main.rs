@@ -13,7 +13,7 @@ mod audio;
 mod voice;
 
 use autopilotmode::agent::{self, Progress};
-use autopilotmode::config::Config;
+use autopilotmode::config::{self, Config, Provider};
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -213,6 +213,53 @@ fn stop_run(cancel: State<'_, Cancel>) {
 /// (see [`Config::from_env`]) so an existing hand-written `.env` keeps working, but there
 /// is no reason to offer a user a choice of spellings.
 const KEY_VAR: &str = "ANTHROPIC_API_KEY";
+/// Same idea for OpenRouter — written under the canonical name, read under any of them.
+const OPENROUTER_KEY_VAR: &str = config::OPENROUTER_KEY_VARS[0];
+const PROVIDER_VAR: &str = "AUTOPILOT_PROVIDER";
+/// The model is stored per provider: the id namespaces do not overlap, so one shared
+/// setting would break the model every time the provider changed.
+const OPENROUTER_MODEL_VAR: &str = "AUTOPILOT_OPENROUTER_MODEL";
+
+/// The models offered in the chat-bar picker.
+///
+/// Fetched live rather than hardcoded. OpenRouter's catalogue moves constantly, and the
+/// library filters it to the ones this loop can actually drive (vision + tool calling) and
+/// then to the best from each company — see [`autopilotmode::openrouter::models`].
+///
+/// Errors are returned as strings so the UI can say *why* the list is empty. Falling back
+/// to a silent empty dropdown would look identical to "OpenRouter has no models", when the
+/// real answer is usually a bad key or no network.
+#[tauri::command]
+fn list_models() -> Result<Vec<autopilotmode::openrouter::ModelInfo>, String> {
+    let cfg = Config::for_provider(Provider::OpenRouter).map_err(|e| e.to_string())?;
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| e.to_string())?;
+    autopilotmode::openrouter::models(&client, &cfg).map_err(|e| e.to_string())
+}
+
+/// Remember the model chosen in the chat bar.
+///
+/// Persisted immediately rather than only on the next Save, because the picker lives in the
+/// main view where there is no Save button — a choice that silently reverted on restart
+/// would read as the setting not working.
+#[tauri::command]
+fn select_model(model: String, env_file: State<'_, EnvFile>) -> Result<(), String> {
+    let model = model.trim().to_string();
+    if model.contains(['\n', '\r']) {
+        return Err("model id cannot contain a line break".into());
+    }
+    let updates = [(OPENROUTER_MODEL_VAR, model.clone())];
+    write_env(&env_file.0, &updates)
+        .map_err(|e| format!("could not write {}: {e}", env_file.0.display()))?;
+    if model.is_empty() {
+        std::env::remove_var(OPENROUTER_MODEL_VAR);
+    } else {
+        std::env::set_var(OPENROUTER_MODEL_VAR, &model);
+    }
+    Ok(())
+}
 
 /// Settings as the pane displays them. The key itself is deliberately **not** returned —
 /// only enough of it to recognise which key is stored. A secret that is never sent to the
@@ -225,6 +272,12 @@ struct SettingsView {
     max_steps: String,
     effort: String,
     env_path: String,
+    // Provider. `has_openrouter_key` gets the same treatment as every other credential
+    // here — the pane learns that a key exists and what it ends with, never the key.
+    provider: String,
+    has_openrouter_key: bool,
+    openrouter_key_hint: String,
+    openrouter_model: String,
     // Voice. `has_voice_key` mirrors the credential treatment above — the pane learns that
     // a key exists and what it ends with, never the key.
     has_voice_key: bool,
@@ -243,6 +296,9 @@ struct SettingsPatch {
     model: String,
     max_steps: String,
     effort: String,
+    provider: String,
+    openrouter_key: String,
+    openrouter_model: String,
     voice_key: String,
     voice_out: bool,
     voice_engine: String,
@@ -278,15 +334,22 @@ fn load_settings(env_file: State<'_, EnvFile>) -> SettingsView {
         "" => "system".to_string(),
         chosen => chosen.to_string(),
     };
+    let provider = config::resolve_provider();
     SettingsView {
         // Asks the real loader rather than re-testing the variable names here, so the pane
-        // cannot disagree with what a run will actually find.
-        has_credential: Config::from_env().is_ok(),
+        // cannot disagree with what a run will actually find. Scoped to the *active*
+        // provider: an Anthropic key is no help to a run configured for OpenRouter, so
+        // reporting "a key is set" off the wrong one would be a lie the first run exposes.
+        has_credential: Config::for_provider(provider).is_ok(),
         key_hint: key_hint(&var(KEY_VAR)),
         model: var("AUTOPILOT_MODEL"),
         max_steps: var("AUTOPILOT_MAX_STEPS"),
         effort: var("AUTOPILOT_EFFORT"),
         env_path: env_file.0.display().to_string(),
+        provider: provider.as_str().to_string(),
+        has_openrouter_key: config::openrouter_key().is_some(),
+        openrouter_key_hint: key_hint(&config::openrouter_key().unwrap_or_default()),
+        openrouter_model: var(OPENROUTER_MODEL_VAR),
         has_voice_key: !voice_key.is_empty(),
         voice_key_hint: key_hint(&voice_key),
         voice_out: matches!(var(VOICE_OUT_VAR).as_str(), "1" | "true" | "yes" | "on"),
@@ -306,6 +369,20 @@ fn save_settings(patch: SettingsPatch, env_file: State<'_, EnvFile>) -> Result<(
     updates.push(("AUTOPILOT_MODEL", patch.model.trim().to_string()));
     updates.push(("AUTOPILOT_MAX_STEPS", patch.max_steps.trim().to_string()));
     updates.push(("AUTOPILOT_EFFORT", patch.effort.trim().to_string()));
+
+    // Written explicitly rather than left to inference. Once someone has keys for both
+    // providers, "whichever key exists" stops being an answer — the stored choice is the
+    // only thing that says which one they meant.
+    let provider = Provider::parse(&patch.provider).unwrap_or(Provider::Anthropic);
+    updates.push((PROVIDER_VAR, provider.as_str().to_string()));
+    let openrouter_key = patch.openrouter_key.trim().to_string();
+    if !openrouter_key.is_empty() {
+        updates.push((OPENROUTER_KEY_VAR, openrouter_key));
+    }
+    updates.push((
+        OPENROUTER_MODEL_VAR,
+        patch.openrouter_model.trim().to_string(),
+    ));
 
     let voice_key = patch.voice_key.trim().to_string();
     if !voice_key.is_empty() {
@@ -402,6 +479,11 @@ fn start_run(
     app: AppHandle,
     goal: String,
     dry_run: bool,
+    // What the chat-bar picker is showing. Passed explicitly rather than re-read from the
+    // environment so the run uses exactly the model the user can see, even if a save is
+    // still in flight — the picker is right next to the Go button, and the two disagreeing
+    // is precisely the confusion this avoids.
+    model: Option<String>,
     running: State<'_, Running>,
     cancel: State<'_, Cancel>,
 ) -> Result<(), String> {
@@ -434,6 +516,9 @@ fn start_run(
         // Config is rebuilt per run so `.env` edits take effect without a restart.
         let result = Config::from_env().and_then(|mut cfg| {
             cfg.dry_run = dry_run;
+            if let Some(m) = model.map(|m| m.trim().to_string()).filter(|m| !m.is_empty()) {
+                cfg.model = m;
+            }
             agent::run_cancellable(&goal, &cfg, Some(&tx), Some(&cancel))
         });
         if let Err(e) = result {
@@ -483,7 +568,9 @@ fn main() {
             mic_state,
             cancel_listening,
             speak,
-            list_voices
+            list_voices,
+            list_models,
+            select_model
         ])
         // Closing the window must not strand the machine. A run can be several seconds
         // into a blocking step with keys physically down from `keydown`, and the worker

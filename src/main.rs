@@ -28,6 +28,11 @@ struct Cli {
     #[arg(long)]
     model: Option<String>,
 
+    /// Which API to use: `anthropic` or `openrouter`. Defaults to whichever key is present
+    /// (see $AUTOPILOT_PROVIDER), preferring Anthropic when both are.
+    #[arg(long, value_name = "NAME")]
+    provider: Option<String>,
+
     /// Cap on observe→act iterations (default: 25, or $AUTOPILOT_MAX_STEPS).
     #[arg(long)]
     max_steps: Option<u32>,
@@ -109,7 +114,19 @@ fn main() -> Result<()> {
         std::process::exit(2);
     }
 
-    let mut cfg = config::Config::from_env()?;
+    // Resolved before the config is built, since the provider decides which credential is
+    // required and which model default applies. An unknown name is rejected rather than
+    // quietly falling back — silently running against the wrong API would be billed to the
+    // wrong account and reported as "my flag did nothing".
+    let mut cfg = match &cli.provider {
+        Some(name) => {
+            let p = config::Provider::parse(name).ok_or_else(|| {
+                anyhow::anyhow!("unknown --provider {name:?} — expected `anthropic` or `openrouter`")
+            })?;
+            config::Config::for_provider(p)?
+        }
+        None => config::Config::from_env()?,
+    };
     // Before the CLI overrides, so an explicit --max-steps etc. still wins.
     if cli.game {
         cfg.apply_game_preset();
@@ -131,6 +148,7 @@ fn main() -> Result<()> {
     }
 
     println!("autopilotmode");
+    println!("  provider   : {}", cfg.provider.label());
     println!(
         "  model      : {}{}{}",
         cfg.model,

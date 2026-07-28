@@ -63,16 +63,40 @@
           <button class="close" id="panel-close" title="Back" aria-label="Back">&times;</button>
         </div>
 
-        <label for="key">Anthropic API key</label>
-        <div class="key-row">
-          <input id="key" type="password" autocomplete="off" spellcheck="false"
-                 placeholder="sk-ant-api…" />
-          <button class="icon-btn ghost" id="reveal" type="button" title="Show key" aria-label="Show key">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
-              <path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" />
-              <circle cx="12" cy="12" r="2.8" />
-            </svg>
-          </button>
+        <label for="provider">Provider</label>
+        <select id="provider">
+          <option value="anthropic">Anthropic — direct</option>
+          <option value="openrouter">OpenRouter — many models, one key</option>
+        </select>
+
+        <!-- One key row at a time. Whichever provider is selected is the only credential
+             that affects a run, and showing both invites pasting into the wrong one. -->
+        <div id="key-anthropic">
+          <label for="key">Anthropic API key</label>
+          <div class="key-row">
+            <input id="key" type="password" autocomplete="off" spellcheck="false"
+                   placeholder="sk-ant-api…" />
+            <button class="icon-btn ghost" id="reveal" type="button" title="Show key" aria-label="Show key">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+                <path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" />
+                <circle cx="12" cy="12" r="2.8" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div id="key-openrouter" hidden>
+          <label for="orkey">OpenRouter API key</label>
+          <div class="key-row">
+            <input id="orkey" type="password" autocomplete="off" spellcheck="false"
+                   placeholder="sk-or-v1-…" />
+            <button class="icon-btn ghost" id="orreveal" type="button" title="Show key" aria-label="Show key">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+                <path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" />
+                <circle cx="12" cy="12" r="2.8" />
+              </svg>
+            </button>
+          </div>
         </div>
         <p class="hint" id="key-state"></p>
 
@@ -171,6 +195,16 @@
         <!-- Swaps in for Go while a run is in flight. A window that can seize the mouse
              must offer a way out that is not "throw the cursor into the corner". -->
         <button class="stop" id="stop" hidden>Stop</button>
+      </div>
+
+      <!-- Model picker. Only for OpenRouter, where the choice is the whole point of the
+           provider; on the Anthropic path there is one model and it lives in settings.
+           Sits here rather than behind the gear because swapping models between runs is a
+           thing you do constantly — a different model is often the answer to a run that
+           went wrong, and you have just watched it go wrong on this screen. -->
+      <div class="row model-row" id="model-row" hidden>
+        <span class="model-label">Model</span>
+        <select id="modelsel" title="Which model drives the loop"></select>
       </div>
 
       <div class="row footer">

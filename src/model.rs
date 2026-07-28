@@ -34,7 +34,9 @@ fn mark_unsupported(model: &str, feature: &str) {
 }
 
 const API_VERSION: &str = "2023-06-01";
-const TOOL_NAME: &str = "computer_action";
+/// The single tool the loop exposes. Shared with [`crate::openrouter`], which has to name
+/// the same function when it rebuilds a reply into this module's canonical turn shape.
+pub(crate) const TOOL_NAME: &str = "computer_action";
 /// Beta flag gating `"speed": "fast"`. Sent only when fast mode is actually requested.
 const FAST_MODE_BETA: &str = "fast-mode-2026-02-01";
 /// Beta flag required whenever the credential is an OAuth token rather than an API key.
@@ -83,6 +85,31 @@ impl Usage {
             input: n("input_tokens"),
             output: n("output_tokens"),
             speed: u.get("speed").and_then(Value::as_str).map(str::to_string),
+        }
+    }
+
+    /// The same accounting from an OpenAI-shaped `usage` block.
+    ///
+    /// The two count differently: OpenAI's `prompt_tokens` is the *whole* prompt including
+    /// anything served from cache, where Anthropic's `input_tokens` is the uncached
+    /// remainder. Subtracting here means the per-step readout says the same thing on both
+    /// providers instead of appearing to double-count a cache hit.
+    pub(crate) fn from_openai(v: &Value) -> Self {
+        let Some(u) = v.get("usage") else {
+            return Self::default();
+        };
+        let n = |k: &str| u.get(k).and_then(Value::as_u64).unwrap_or(0);
+        let cached = u
+            .get("prompt_tokens_details")
+            .and_then(|d| d.get("cached_tokens"))
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        Self {
+            cache_read: cached,
+            cache_write: 0,
+            input: n("prompt_tokens").saturating_sub(cached),
+            output: n("completion_tokens"),
+            speed: None,
         }
     }
 
@@ -235,7 +262,30 @@ fn platform_hint() -> String {
 }
 
 /// Send one request and return the chosen action. Retries transient errors (429/5xx).
+///
+/// Dispatches on the configured provider. `messages` is always in Anthropic's shape — that
+/// is the loop's canonical history format — and [`crate::openrouter`] translates it for the
+/// OpenAI-compatible path rather than the agent knowing there is a choice.
 pub fn request_action(
+    client: &reqwest::blocking::Client,
+    cfg: &Config,
+    model: &str,
+    system: &str,
+    messages: &[Value],
+    tools: &Value,
+) -> Result<ModelResponse> {
+    match cfg.provider {
+        crate::config::Provider::Anthropic => {
+            request_anthropic(client, cfg, model, system, messages, tools)
+        }
+        crate::config::Provider::OpenRouter => {
+            crate::openrouter::request_action(client, cfg, model, system, messages, tools)
+        }
+    }
+}
+
+/// The native path: Anthropic's Messages API.
+fn request_anthropic(
     client: &reqwest::blocking::Client,
     cfg: &Config,
     model: &str,
@@ -320,7 +370,7 @@ pub fn request_action(
 
         if status.is_success() {
             match parse_success(&text)? {
-                Parsed::Action(r) => return Ok(r),
+                Parsed::Action(r) => return Ok(*r),
                 // `tool_choice: any` forces a tool call, so this is almost always the reply
                 // being truncated mid-narration. Resampling usually fixes it; a hard error
                 // here would throw away an otherwise healthy run.
@@ -392,11 +442,13 @@ pub fn request_action(
 }
 
 /// How many times to (re)issue a turn before giving up.
-const ATTEMPTS: u32 = 3;
+pub(crate) const ATTEMPTS: u32 = 3;
 
-/// Outcome of reading a 200 response.
-enum Parsed {
-    Action(ModelResponse),
+/// Outcome of reading a 200 response. Shared by both provider paths.
+pub(crate) enum Parsed {
+    /// Boxed because a `ModelResponse` carries the whole assistant turn — enough larger
+    /// than the other variant that every `Parsed` would otherwise be sized for it.
+    Action(Box<ModelResponse>),
     /// Well-formed reply that carried no tool call — worth resampling rather than failing.
     NoAction {
         stop_reason: String,
@@ -410,7 +462,7 @@ enum Parsed {
 /// one (`"x": "168, 152"`). Resampling does not help — the same prompt reproduces the same
 /// mistake, which burns every retry and kills the run. The intent is unambiguous, so repair
 /// it here instead.
-fn normalize_action_input(input: &mut Value) {
+pub(crate) fn normalize_action_input(input: &mut Value) {
     let Some(obj) = input.as_object_mut() else {
         return;
     };
@@ -422,7 +474,7 @@ fn normalize_action_input(input: &mut Value) {
     });
     if let Some((x, y)) = packed {
         obj.insert("x".to_string(), json!(x));
-        if obj.get("y").map_or(true, Value::is_null) {
+        if obj.get("y").is_none_or(Value::is_null) {
             obj.insert("y".to_string(), json!(y));
         }
     }
@@ -510,21 +562,21 @@ fn parse_success(text: &str) -> Result<Parsed> {
         });
     };
 
-    Ok(Parsed::Action(ModelResponse {
+    Ok(Parsed::Action(Box::new(ModelResponse {
         assistant_content: Value::Array(content.clone()),
         tool_use_id,
         action,
         text: narration,
         usage: Usage::from_response(&v),
-    }))
+    })))
 }
 
-fn backoff(attempt: u32) {
+pub(crate) fn backoff(attempt: u32) {
     let secs = 1u64 << attempt; // 1s, 2s, 4s
     std::thread::sleep(std::time::Duration::from_secs(secs));
 }
 
-fn truncate(s: &str, n: usize) -> String {
+pub(crate) fn truncate(s: &str, n: usize) -> String {
     if s.len() <= n {
         s.to_string()
     } else {

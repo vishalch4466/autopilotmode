@@ -26,15 +26,25 @@ const SIZE = {
   compact: [420, 208],
   // Once there is a transcript to read, the window earns the extra height.
   chat: [420, 520],
-  settings: [420, 452],
-  settingsVoice: [420, 492],
+  settings: [420, 504],
+  settingsVoice: [420, 544],
 };
+
+/** Height the model picker row adds, so the window grows only when it is shown. */
+const MODEL_ROW_H = 36;
 
 let grown = false;
 async function growForChat() {
   if (grown) return;
   grown = true;
-  await resize(SIZE.chat);
+  await resizeMain();
+}
+
+/** Size the main view for its current contents — transcript open, picker shown, or not. */
+async function resizeMain() {
+  if (!panel.hidden) return; // settings is over the card; it owns the size while open
+  const [w, h] = grown ? SIZE.chat : SIZE.compact;
+  await resize([w, h + (el("model-row").hidden ? 0 : MODEL_ROW_H)]);
 }
 // Surfaced rather than swallowed: a silently-failed resize leaves the pane scrolling in a
 // window too short for it, which is confusing in a way a console line is not.
@@ -114,12 +124,91 @@ function setTransient(text) {
   else transient.querySelector("p").textContent = text;
 }
 
+/* ── model picker ─────────────────────────────────────────────────────
+   Only meaningful on OpenRouter: that provider's whole point is the choice, and the list
+   comes from its live catalogue rather than anything hardcoded here. Rust filters it to
+   models this loop can actually drive and then to the best from each company — see
+   `openrouter::models`. */
+
+const modelSel = el("modelsel");
+const modelRow = el("model-row");
+
+let provider = "anthropic";
+let models = [];
+let currentModel = "";
+
+/** `Claude Opus 5 · $5.00/M · 1000k` — name, what it costs, how much it can hold. */
+function modelLabel(m) {
+  const ctx =
+    m.context_length >= 1000
+      ? `${Math.round(m.context_length / 1000)}k`
+      : String(m.context_length);
+  return `${m.name} · ${m.prompt_price}/M · ${ctx}`;
+}
+
+function fillModels() {
+  modelSel.innerHTML = "";
+  for (const m of models) modelSel.append(new Option(modelLabel(m), m.id));
+
+  // A model set by hand in `.env`, or one that has since dropped off the per-company list,
+  // is kept rather than silently swapped for something else. Same reasoning as the
+  // microphone picker keeping a device that is currently unplugged: quietly changing a
+  // saved choice is worse than showing one that looks unusual.
+  if (currentModel && !models.some((m) => m.id === currentModel)) {
+    modelSel.append(new Option(`${currentModel} — set by hand`, currentModel));
+  }
+  modelSel.value = currentModel || models[0]?.id || "";
+  currentModel = modelSel.value;
+}
+
+async function loadModels() {
+  modelSel.innerHTML = "";
+  modelSel.append(new Option("Loading models…", ""));
+  modelSel.disabled = true;
+  try {
+    models = await invoke("list_models");
+    fillModels();
+  } catch (e) {
+    // Said out loud rather than left as an empty dropdown, which looks identical to
+    // "OpenRouter has no models" when the real answer is almost always a bad key.
+    models = [];
+    modelSel.innerHTML = "";
+    modelSel.append(new Option(currentModel || "Couldn't load models", currentModel || ""));
+    addMsg("err", `Couldn't load the model list — ${e}`);
+  } finally {
+    modelSel.disabled = running;
+  }
+}
+
+/** Show the picker for OpenRouter, hide it otherwise, and resize to match. */
+async function syncModelRow({ reload = false } = {}) {
+  const on = provider === "openrouter";
+  modelRow.hidden = !on;
+  await resizeMain();
+  if (on && (reload || !models.length)) await loadModels();
+}
+
+modelSel.addEventListener("change", async () => {
+  if (!modelSel.value) return;
+  currentModel = modelSel.value;
+  // Persisted immediately — there is no Save button out here, and a choice that reverted
+  // on restart would read as the picker not working.
+  try {
+    await invoke("select_model", { model: currentModel });
+  } catch (e) {
+    addMsg("err", String(e));
+  }
+});
+
 /** Disable what cannot be used mid-run, and reflect it in the pill. */
 function syncBusy() {
   card.classList.toggle("busy", running);
   goal.disabled = running;
   mic.disabled = running;
   dry.disabled = running;
+  // Swapping the model mid-run would not take effect until the next one, so the control
+  // says so by being unavailable rather than appearing to work.
+  modelSel.disabled = running;
   goal.placeholder = running ? "running…" : "Tell me what to do";
   // Stop replaces Go rather than sitting beside it: only one of them is ever the
   // action you want, and the row has no space to spare.
@@ -153,7 +242,13 @@ async function start() {
   await growForChat();
 
   try {
-    await invoke("start_run", { goal: text, dryRun });
+    // The model travels with the request so the run uses exactly what the picker shows,
+    // rather than whatever the last save happened to land in `.env`.
+    await invoke("start_run", {
+      goal: text,
+      dryRun,
+      model: provider === "openrouter" ? currentModel || null : null,
+    });
   } catch (e) {
     running = false;
     setMood("sad");
@@ -407,6 +502,9 @@ el("close").addEventListener("click", () => getCurrentWindow().close());
 
 const [keyInput, keyState, reveal] = [el("key"), el("key-state"), el("reveal")];
 const [modelInput, stepsInput, effortInput] = [el("model"), el("steps"), el("effort")];
+const [providerSel, orkeyInput, orreveal] = [el("provider"), el("orkey"), el("orreveal")];
+/** Last-loaded settings, so switching provider in the pane can restore the other's model. */
+let loaded = {};
 const [saveBtn, savedNote, envPath] = [el("save"), el("saved"), el("env-path")];
 const [vkeyInput, vkeyState, vreveal] = [el("vkey"), el("vkey-state"), el("vreveal")];
 const [micSel, voutBtn, vengineSel] = [el("micsel"), el("vout"), el("vengine")];
@@ -441,21 +539,48 @@ async function fillMicrophones(selected) {
   micSel.value = selected ?? "";
 }
 
+/**
+ * Show the fields belonging to the selected provider.
+ *
+ * The Model box edits whichever provider is active, because the two id namespaces do not
+ * overlap — `claude-opus-5` is a 404 on OpenRouter and `anthropic/claude-sonnet-4.5` is a
+ * 404 on Anthropic. One shared box would break the model every time the provider changed.
+ */
+function syncProviderFields() {
+  const or = providerSel.value === "openrouter";
+  el("key-anthropic").hidden = or;
+  el("key-openrouter").hidden = !or;
+
+  modelInput.value = or ? (loaded.openrouter_model ?? "") : (loaded.model ?? "");
+  modelInput.placeholder = or ? "anthropic/claude-sonnet-4.5" : "claude-opus-5";
+
+  const has = or ? loaded.has_openrouter_key : loaded.has_credential;
+  const hint = or ? loaded.openrouter_key_hint : loaded.key_hint;
+  keyState.textContent = has
+    ? `A key is set (${hint}). Leave blank to keep it.`
+    : or
+      ? "No OpenRouter key yet — get one at openrouter.ai/keys."
+      : "No key set yet — paste one to get started.";
+  keyState.classList.toggle("warn", !has);
+}
+
 async function openSettings(reason) {
   const s = await invoke("load_settings");
+  loaded = s;
   keyInput.value = "";
-  modelInput.value = s.model;
+  orkeyInput.value = "";
+  providerSel.value = s.provider;
   stepsInput.value = s.max_steps;
   effortInput.value = s.effort;
   envPath.textContent = `Saved to ${s.env_path}`;
   savedNote.textContent = "";
 
-  keyState.textContent = reason
-    ? reason
-    : s.has_credential
-      ? `A key is set (${s.key_hint}). Leave blank to keep it.`
-      : "No key set yet — paste one to get started.";
-  keyState.classList.toggle("warn", !s.has_credential);
+  // Fills the model box and the key hint for whichever provider is selected.
+  syncProviderFields();
+  if (reason) {
+    keyState.textContent = reason;
+    keyState.classList.add("warn");
+  }
 
   vkeyInput.value = "";
   hasVoiceKey = s.has_voice_key;
@@ -481,15 +606,23 @@ async function openSettings(reason) {
 
 async function closeSettings() {
   panel.hidden = true;
-  await resize(SIZE.compact);
+  await resizeMain();
 }
 
+providerSel.addEventListener("change", syncProviderFields);
+
 saveBtn.addEventListener("click", async () => {
+  const or = providerSel.value === "openrouter";
   try {
     await invoke("save_settings", {
       patch: {
         api_key: keyInput.value,
-        model: modelInput.value,
+        // The Model box edits the active provider; the other one's model is written back
+        // unchanged so switching provider and saving does not wipe it.
+        model: or ? (loaded.model ?? "") : modelInput.value,
+        openrouter_model: or ? modelInput.value : (loaded.openrouter_model ?? ""),
+        provider: providerSel.value,
+        openrouter_key: orkeyInput.value,
         max_steps: stepsInput.value,
         effort: effortInput.value,
         voice_key: vkeyInput.value,
@@ -502,8 +635,18 @@ saveBtn.addEventListener("click", async () => {
     voiceEngine = vengineSel.value;
     voiceId = vvoiceSel.value;
     if (vkeyInput.value.trim()) hasVoiceKey = true;
+
+    // The chat bar reflects the saved provider straight away. A new key means the model
+    // list has to be fetched again — the old one was fetched with a key that may not have
+    // worked, or with no key at all.
+    const switched = provider !== providerSel.value;
+    provider = providerSel.value;
+    if (or) currentModel = modelInput.value.trim() || currentModel;
+    await syncModelRow({ reload: switched || orkeyInput.value.trim() !== "" });
+
     savedNote.textContent = "Saved.";
     keyInput.value = "";
+    orkeyInput.value = "";
     vkeyInput.value = "";
     setTimeout(closeSettings, 450);
   } catch (e) {
@@ -515,6 +658,7 @@ const toggleReveal = (input) => () => {
   input.type = input.type === "password" ? "text" : "password";
 };
 reveal.addEventListener("click", toggleReveal(keyInput));
+orreveal.addEventListener("click", toggleReveal(orkeyInput));
 vreveal.addEventListener("click", toggleReveal(vkeyInput));
 
 voutBtn.addEventListener("click", () => {
@@ -585,14 +729,23 @@ syncBusy();
 
 // Voice preferences have to be known before the first run finishes, not only after the
 // pane has been opened once — otherwise the first reply is silent whatever the setting says.
-invoke("load_settings").then((s) => {
+// The provider matters just as early: the model picker is part of the main view, so it has
+// to be right before the first goal is typed, not after a trip through settings.
+invoke("load_settings").then(async (s) => {
+  loaded = s;
   voiceOut = s.voice_out;
   voiceEngine = s.voice_engine;
   voiceId = s.voice_id;
   hasVoiceKey = s.has_voice_key;
+
+  provider = s.provider;
+  currentModel = s.openrouter_model;
+  await syncModelRow();
+
   // Surface a missing credential up front rather than letting the first run fail with it.
   if (!s.has_credential) {
-    addMsg("err", "Add your Anthropic API key to get started.");
-    openSettings("No key set yet — paste one to get started.");
+    const which = provider === "openrouter" ? "OpenRouter" : "Anthropic";
+    addMsg("err", `Add your ${which} API key to get started.`);
+    openSettings(`No ${which} key set yet — paste one to get started.`);
   }
 });

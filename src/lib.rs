@@ -13,3 +13,4 @@ pub mod config;
 pub mod executor;
 pub mod human;
 pub mod model;
+pub mod openrouter;
